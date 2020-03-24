@@ -1,11 +1,11 @@
 # Dockerfile for ELK stack
 # Elasticsearch, Logstash, Kibana 7.6.1
 
-# Build with:
+# Build with: docker rmi $(docker images -a -q)
 # docker build -t <repo-user>/elk .
 
 # Run with:
-# docker run -p 5601:5601 -p 9200:9200 -p 5044:5044 -it --name elk <repo-user>/elk
+# docker run --rm -p 5601:5601 -p 9200:9200 -p 5044:5044 -it --name elk dtry/elk:v.4
 
 FROM openjdk:8-jdk
 
@@ -19,6 +19,13 @@ ENV \
 #                                INSTALLATION
 ###############################################################################
 
+RUN set -x \
+ && apt update -qq \
+ && apt install -qqy --no-install-recommends ca-certificates curl gosu tzdata \
+ && apt clean \
+ && rm -rf /var/lib/apt/lists/* \
+ && gosu nobody true \
+ && set +x
 ### install Elasticsearch
 ARG ELK_VERSION=7.6.1
 ENV \
