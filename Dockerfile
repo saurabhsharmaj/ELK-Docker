@@ -1,15 +1,26 @@
-#docker build -t ansh/elk:7.6.0 .
-#docker run -d --rm --net=host -p 5602:5601 -p 9400:9200 -p 5045:5044 --name elk ansh/elk:7.6.0
+# Dockerfile for ELK stack
+# Elasticsearch, Logstash, Kibana 7.6.1
+
+# Build with:
+# docker build -t <repo-user>/elk .
+
+# Run with:
+# docker run -p 5601:5601 -p 9200:9200 -p 5044:5044 -it --name elk <repo-user>/elk
+
 FROM openjdk:8-jdk
 
 RUN apt-get update
+MAINTAINER saurabh sharma http://saurabh.net
+ENV \
+ REFRESHED_AT=2020-02-28
+
 
 ###############################################################################
 #                                INSTALLATION
 ###############################################################################
 
 ### install Elasticsearch
-ARG ELK_VERSION=7.6.0
+ARG ELK_VERSION=7.6.1
 ENV \
  ES_VERSION=${ELK_VERSION} \
  ES_HOME=/opt/elasticsearch \
@@ -22,7 +33,7 @@ ENV \
  ES_PACKAGE=elasticsearch-${ES_VERSION}-linux-x86_64.tar.gz \
  ES_GID=991 \
  ES_UID=991 \
- ES_PATH_CONF=${ELK_VERSION}/config \
+ ES_PATH_CONF=/etc/elasticsearch \
  ES_PATH_BACKUP=/var/backups \
  KIBANA_VERSION=${ELK_VERSION}
 
@@ -37,24 +48,6 @@ RUN DEBIAN_FRONTEND=noninteractive \
  && mkdir -p /var/log/elasticsearch ${ES_PATH_CONF} ${ES_PATH_CONF}/scripts /var/lib/elasticsearch ${ES_PATH_BACKUP} \
  && chown -R elasticsearch:elasticsearch ${ES_HOME} /var/log/elasticsearch /var/lib/elasticsearch ${ES_PATH_CONF} ${ES_PATH_BACKUP}
 
-
-### install Logstash
-
-ENV \
- LOGSTASH_PACKAGE=logstash-${LOGSTASH_VERSION}.tar.gz \
- LOGSTASH_GID=992 \
- LOGSTASH_UID=992 \
- LOGSTASH_PATH_CONF=/etc/logstash \
- LOGSTASH_PATH_SETTINGS=${LOGSTASH_HOME}/config
-
-RUN mkdir ${LOGSTASH_HOME} \
- && curl -O https://artifacts.elastic.co/downloads/logstash/${LOGSTASH_PACKAGE} \
- && tar xzf ${LOGSTASH_PACKAGE} -C ${LOGSTASH_HOME} --strip-components=1 \
- && rm -f ${LOGSTASH_PACKAGE} \
- && groupadd -r logstash -g ${LOGSTASH_GID} \
- && useradd -r -s /usr/sbin/nologin -d ${LOGSTASH_HOME} -c "Logstash service user" -u ${LOGSTASH_UID} -g logstash logstash \
- && mkdir -p /var/log/logstash ${LOGSTASH_PATH_CONF}/conf.d \
- && chown -R logstash:logstash ${LOGSTASH_HOME} /var/log/logstash ${LOGSTASH_PATH_CONF}
 
 
 ### install Kibana
@@ -85,12 +78,6 @@ ADD ./elasticsearch-init /etc/init.d/elasticsearch
 RUN sed -i -e 's#^ES_HOME=$#ES_HOME='$ES_HOME'#' /etc/init.d/elasticsearch \
  && chmod +x /etc/init.d/elasticsearch
 
-### Logstash
-
-ADD ./logstash-init /etc/init.d/logstash
-RUN sed -i -e 's#^LS_HOME=$#LS_HOME='$LOGSTASH_HOME'#' /etc/init.d/logstash \
- && chmod +x /etc/init.d/logstash
-
 ### Kibana
 
 ADD ./kibana-init /etc/init.d/kibana
@@ -105,36 +92,18 @@ RUN sed -i -e 's#^KIBANA_HOME=$#KIBANA_HOME='$KIBANA_HOME'#' /etc/init.d/kibana 
 ### configure Elasticsearch
 
 ADD ./elasticsearch.yml ${ES_PATH_CONF}/elasticsearch.yml
-#ADD ./elasticsearch-default /etc/default/elasticsearch
+ADD ./elasticsearch-default /etc/default/elasticsearch
 RUN cp ${ES_HOME}/config/log4j2.properties ${ES_HOME}/config/jvm.options \
     ${ES_PATH_CONF} \
  && chown -R elasticsearch:elasticsearch ${ES_PATH_CONF} \
  && chmod -R +r ${ES_PATH_CONF}
 
-### configure Logstash
-
-
-# pipelines
-ADD pipelines.yml ${LOGSTASH_PATH_SETTINGS}/pipelines.yml
-
-# filters
-#ADD ./logstash-conf/*.conf ${LOGSTASH_PATH_CONF}/conf.d/
-
-# patterns
-#ADD ./nginx.pattern ${LOGSTASH_HOME}/patterns/nginx
-#RUN chown -R logstash:logstash ${LOGSTASH_HOME}/patterns
-
-# Fix permissions
-RUN chmod -R +r ${LOGSTASH_PATH_CONF} ${LOGSTASH_PATH_SETTINGS} \
- && chown -R logstash:logstash ${LOGSTASH_PATH_SETTINGS}
 
 ### configure logrotate
 
 ADD ./elasticsearch-logrotate /etc/logrotate.d/elasticsearch
-ADD ./logstash-logrotate /etc/logrotate.d/logstash
 ADD ./kibana-logrotate /etc/logrotate.d/kibana
 RUN chmod 644 /etc/logrotate.d/elasticsearch \
- && chmod 644 /etc/logrotate.d/logstash \
  && chmod 644 /etc/logrotate.d/kibana
 
 
@@ -147,10 +116,10 @@ ADD ./kibana.yml ${KIBANA_HOME}/config/kibana.yml
 #                                   START
 ###############################################################################
 
-ADD start.sh /usr/local/bin/start.sh
+ADD ./start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
-#EXPOSE 5601 9200 9300 5044
-#VOLUME /var/lib/elasticsearch
+EXPOSE 5601 9200 9300 5044
+VOLUME /var/lib/elasticsearch
 
 CMD [ "/usr/local/bin/start.sh" ]
