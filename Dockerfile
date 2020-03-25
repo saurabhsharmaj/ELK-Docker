@@ -1,38 +1,40 @@
 # Dockerfile for ELK stack
 # Elasticsearch, Logstash, Kibana 7.6.1
 
-# Build with: docker rmi $(docker images -a -q)
+# Build with:
 # docker build -t <repo-user>/elk .
 
 # Run with:
-# docker run --rm -p 5601:5601 -p 9200:9200 -p 5044:5044 -it --name elk dtry/elk:v.4
+# docker run -p 5601:5601 -p 9200:9200 -p 5044:5044 -it --name elk <repo-user>/elk
 
-FROM openjdk:8-jdk
+#FROM phusion/baseimage:0.11
+FROM openjdk:8-jdk-alpine
+FROM ubuntu:18.04
 
-RUN apt-get update
-MAINTAINER saurabh sharma http://saurabh.net
+MAINTAINER saurabh sharma saurabhsharmaj
 ENV \
- REFRESHED_AT=2020-02-28
+ REFRESHED_AT=2020-03-25
 
 
 ###############################################################################
 #                                INSTALLATION
 ###############################################################################
 
+### install prerequisites (cURL, gosu, JDK, tzdata)
+
 RUN set -x \
  && apt update -qq \
- && apt install -qqy --no-install-recommends ca-certificates curl gosu tzdata \
+ && apt install -qqy --no-install-recommends curl gosu tzdata openjdk-8-jdk \
  && apt clean \
  && rm -rf /var/lib/apt/lists/* \
  && gosu nobody true \
  && set +x
+
 ### install Elasticsearch
 ARG ELK_VERSION=7.6.1
 ENV \
  ES_VERSION=${ELK_VERSION} \
- ES_HOME=/opt/elasticsearch \
- LOGSTASH_VERSION=${ELK_VERSION} \
- LOGSTASH_HOME=/opt/logstash
+ ES_HOME=/opt/elasticsearch 
 
 # note you can't define an env var that references another one in the same block (docker layer)
 ENV \
@@ -56,7 +58,6 @@ RUN DEBIAN_FRONTEND=noninteractive \
  && chown -R elasticsearch:elasticsearch ${ES_HOME} /var/log/elasticsearch /var/lib/elasticsearch ${ES_PATH_CONF} ${ES_PATH_BACKUP}
 
 
-
 ### install Kibana
 
 ENV \
@@ -74,6 +75,11 @@ RUN mkdir ${KIBANA_HOME} \
  && mkdir -p /var/log/kibana \
  && chown -R kibana:kibana ${KIBANA_HOME} /var/log/kibana
 
+### Kibana
+
+ADD ./kibana-init /etc/init.d/kibana
+RUN sed -i -e 's#^KIBANA_HOME=$#KIBANA_HOME='$KIBANA_HOME'#' /etc/init.d/kibana \
+ && chmod +x /etc/init.d/kibana
 
 ###############################################################################
 #                              START-UP SCRIPTS
@@ -85,11 +91,6 @@ ADD ./elasticsearch-init /etc/init.d/elasticsearch
 RUN sed -i -e 's#^ES_HOME=$#ES_HOME='$ES_HOME'#' /etc/init.d/elasticsearch \
  && chmod +x /etc/init.d/elasticsearch
 
-### Kibana
-
-ADD ./kibana-init /etc/init.d/kibana
-RUN sed -i -e 's#^KIBANA_HOME=$#KIBANA_HOME='$KIBANA_HOME'#' /etc/init.d/kibana \
- && chmod +x /etc/init.d/kibana
 
 
 ###############################################################################
@@ -109,15 +110,13 @@ RUN cp ${ES_HOME}/config/log4j2.properties ${ES_HOME}/config/jvm.options \
 ### configure logrotate
 
 ADD ./elasticsearch-logrotate /etc/logrotate.d/elasticsearch
+
 ADD ./kibana-logrotate /etc/logrotate.d/kibana
 RUN chmod 644 /etc/logrotate.d/elasticsearch \
  && chmod 644 /etc/logrotate.d/kibana
 
-
 ### configure Kibana
-
 ADD ./kibana.yml ${KIBANA_HOME}/config/kibana.yml
-
 
 ###############################################################################
 #                                   START
@@ -126,7 +125,7 @@ ADD ./kibana.yml ${KIBANA_HOME}/config/kibana.yml
 ADD ./start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
-EXPOSE 5601 9200 9300 5044
+EXPOSE 5601 9200 9300
 VOLUME /var/lib/elasticsearch
 
 CMD [ "/usr/local/bin/start.sh" ]
